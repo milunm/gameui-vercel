@@ -1,14 +1,12 @@
 export default async function handler(req, res) {
-  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Basic rate limiting header (Vercel handles more sophisticated limiting via middleware)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  const { prompt } = req.body;
+  const { prompt } = req.body || {};
 
   if (!prompt || typeof prompt !== 'string' || prompt.length > 500) {
     return res.status(400).json({ error: 'Invalid prompt' });
@@ -26,34 +24,40 @@ Output ONLY valid JSON, no markdown fences, no preamble.`;
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,   // set this in Vercel dashboard
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 1000,
         system: systemPrompt,
         messages: [{ role: 'user', content: `Create a game UI component: ${prompt}` }],
       }),
     });
 
+    // Forward the actual Anthropic error so we can debug it
     if (!response.ok) {
-      const err = await response.text();
-      console.error('Anthropic error:', err);
-      return res.status(502).json({ error: 'Upstream API error' });
+      const errText = await response.text();
+      console.error('Anthropic error:', response.status, errText);
+      return res.status(502).json({ error: `Anthropic ${response.status}: ${errText}` });
     }
 
     const data = await response.json();
     const raw = data.content.map(b => b.text || '').join('');
-
-    // Strip any accidental markdown fences
     const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('JSON parse failed. Raw:', raw);
+      return res.status(502).json({ error: 'Model returned invalid JSON — try again.' });
+    }
 
     return res.status(200).json({ html: parsed.html || '', css: parsed.css || '' });
 
   } catch (err) {
-    console.error('Handler error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Handler error:', err.message);
+    return res.status(500).json({ error: err.message });
   }
 }
