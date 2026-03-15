@@ -44,7 +44,7 @@ Output ONLY valid JSON, no markdown fences, no preamble.`;
 
     const data = await response.json();
     const raw = data.content.map(b => b.text || '').join('');
-    const clean = raw.replace(/```json|```/g, '').trim();
+    const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
     let parsed;
     try {
