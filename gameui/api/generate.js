@@ -44,7 +44,11 @@ Output ONLY valid JSON, no markdown fences, no preamble.`;
 
     const data = await response.json();
     const raw = data.content.map(b => b.text || '').join('');
-    const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('No JSON object found in response');
+    const clean = raw.slice(start, end + 1);
+  
 
     let parsed;
     try {
